@@ -44,8 +44,20 @@ class StreamerApp extends AppServer {
     // Track the session for this user
     this.userSessionsMap.set(userId, session);
 
+    // Initialize WiFi state
+    session.glassesSupportsWifi = null;
+    session.glassesWifiConnected = null;
+    session.glassesWifiSsid = null;
+
+    // Check capabilities to see if glasses support WiFi
+    if (session.capabilities) {
+      session.glassesSupportsWifi = session.capabilities.hasWifi === true;
+      console.log(`Glasses WiFi support: ${session.glassesSupportsWifi}`);
+    }
+
     session.subscribe(StreamType.MANAGED_STREAM_STATUS);
     session.subscribe(StreamType.RTMP_STREAM_STATUS);
+    session.subscribe(StreamType.GLASSES_CONNECTION_STATE);
 
     // Check for existing streams and update UI accordingly
     try {
@@ -134,6 +146,25 @@ class StreamerApp extends AppServer {
       broadcastStreamStatus(userId, formatStreamStatus(session));
     }) ?? (() => {});
 
+    // Glasses connection state updates (includes WiFi status)
+    const connectionStateUnsubscribe = session.onGlassesConnectionState((state: any) => {
+      try {
+        console.log('Glasses connection state update:', state);
+
+        // Update WiFi status if available
+        if (state?.wifi) {
+          session.glassesWifiConnected = state.wifi.connected === true;
+          session.glassesWifiSsid = state.wifi.ssid || null;
+          console.log(`WiFi status - Connected: ${session.glassesWifiConnected}, SSID: ${session.glassesWifiSsid}`);
+        }
+
+        // Broadcast updated status to UI
+        broadcastStreamStatus(userId, formatStreamStatus(session));
+      } catch (error) {
+        console.error('Error processing connection state:', error);
+      }
+    });
+
     // Broadcast on disconnect and cleanup the mapping
     const disconnectedUnsubscribe = session.events.onDisconnected((info: any) => {
       try {
@@ -152,6 +183,7 @@ class StreamerApp extends AppServer {
       statusUnsubscribe();
       rtmpStatusUnsubscribe();
       batteryUnsubscribe();
+      connectionStateUnsubscribe();
       disconnectedUnsubscribe();
     });
 

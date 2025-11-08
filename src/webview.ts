@@ -117,6 +117,29 @@ export function setupExpressRoutes(server: AppServer): void {
         res.status(401).json({ error: 'Unauthorized' });
         return;
       }
+
+      // Check if glasses require WiFi and if WiFi is connected
+      if (req.activeSession.glassesSupportsWifi && !req.activeSession.glassesWifiConnected) {
+        console.log('Glasses require WiFi but not connected - requesting WiFi setup');
+        try {
+          req.activeSession.requestWifiSetup('Streaming requires your glasses to be connected to WiFi');
+          res.status(400).json({
+            ok: false,
+            error: 'WiFi connection required',
+            needsWifiSetup: true,
+            message: 'A WiFi setup prompt has been sent to your phone.'
+          });
+          return;
+        } catch (setupError) {
+          console.error('Error requesting WiFi setup:', setupError);
+          res.status(400).json({
+            ok: false,
+            error: 'Glasses require WiFi connection. Please connect your glasses to WiFi and try again.'
+          });
+          return;
+        }
+      }
+
       // Save configuration
       if (req.body?.platform) req.activeSession.streamPlatform = req.body.platform;
       if (req.body?.streamKey !== undefined) req.activeSession.streamKey = req.body.streamKey;
@@ -159,6 +182,25 @@ export function setupExpressRoutes(server: AppServer): void {
       broadcastStreamStatus(req.authUserId, formatStreamStatus(req.activeSession));
       res.json({ ok: true });
     } catch (err: any) {
+      console.error('Error starting managed stream:', err);
+
+      // Check if this is a WiFi error
+      if (err?.code === 'WIFI_NOT_CONNECTED' || err?.message?.includes('WiFi')) {
+        console.log('WiFi error detected - requesting WiFi setup');
+        try {
+          req.activeSession.requestWifiSetup('Streaming requires your glasses to be connected to WiFi');
+          res.status(400).json({
+            ok: false,
+            error: 'WiFi connection required',
+            needsWifiSetup: true,
+            message: 'A WiFi setup prompt has been sent to your phone.'
+          });
+          return;
+        } catch (setupError) {
+          console.error('Error requesting WiFi setup:', setupError);
+        }
+      }
+
       res.status(400).json({ ok: false, error: String(err?.message ?? err) });
     }
   });
@@ -213,6 +255,29 @@ export function setupExpressRoutes(server: AppServer): void {
         res.status(401).json({ error: 'Unauthorized' });
         return;
       }
+
+      // Check if glasses require WiFi and if WiFi is connected
+      if (req.activeSession.glassesSupportsWifi && !req.activeSession.glassesWifiConnected) {
+        console.log('Glasses require WiFi but not connected - requesting WiFi setup');
+        try {
+          req.activeSession.requestWifiSetup('Streaming requires your glasses to be connected to WiFi');
+          res.status(400).json({
+            ok: false,
+            error: 'WiFi connection required',
+            needsWifiSetup: true,
+            message: 'A WiFi setup prompt has been sent to your phone.'
+          });
+          return;
+        } catch (setupError) {
+          console.error('Error requesting WiFi setup:', setupError);
+          res.status(400).json({
+            ok: false,
+            error: 'Glasses require WiFi connection. Please connect your glasses to WiFi and try again.'
+          });
+          return;
+        }
+      }
+
       const rtmpUrl: string | undefined = req.body?.rtmpUrl;
       if (!rtmpUrl) {
         res.status(400).json({ ok: false, error: 'Missing rtmpUrl' });
@@ -228,6 +293,25 @@ export function setupExpressRoutes(server: AppServer): void {
       broadcastStreamStatus(req.authUserId, formatStreamStatus(req.activeSession));
       res.json({ ok: true });
     } catch (err: any) {
+      console.error('Error starting unmanaged stream:', err);
+
+      // Check if this is a WiFi error
+      if (err?.code === 'WIFI_NOT_CONNECTED' || err?.message?.includes('WiFi')) {
+        console.log('WiFi error detected - requesting WiFi setup');
+        try {
+          req.activeSession.requestWifiSetup('Streaming requires your glasses to be connected to WiFi');
+          res.status(400).json({
+            ok: false,
+            error: 'WiFi connection required',
+            needsWifiSetup: true,
+            message: 'A WiFi setup prompt has been sent to your phone.'
+          });
+          return;
+        } catch (setupError) {
+          console.error('Error requesting WiFi setup:', setupError);
+        }
+      }
+
       res.status(400).json({ ok: false, error: String(err?.message ?? err) });
     }
   });
@@ -368,6 +452,9 @@ export type StreamStatusPayload = {
   error?: string | null;
   glassesBatteryPercent?: number | null;
   hasActiveSession?: boolean;
+  glassesSupportsWifi?: boolean | null;
+  glassesWifiConnected?: boolean | null;
+  glassesWifiSsid?: string | null;
 };
 
 /**
@@ -386,6 +473,9 @@ export function formatStreamStatus(session?: AppSession): StreamStatusPayload {
     error: session?.error ?? null,
     glassesBatteryPercent: session?.glassesBatteryPercent ?? null,
     hasActiveSession: !!session,
+    glassesSupportsWifi: session?.glassesSupportsWifi ?? null,
+    glassesWifiConnected: session?.glassesWifiConnected ?? null,
+    glassesWifiSsid: session?.glassesWifiSsid ?? null,
   };
 }
 
