@@ -21,6 +21,18 @@ export async function handleToolCall(toolCall: ToolCall, userId: string, session
       return "Error: No active session";
     }
 
+    // Check if glasses require WiFi and if WiFi is connected
+    if (session.glassesSupportsWifi && !session.glassesWifiConnected) {
+      console.log('Glasses require WiFi but not connected - requesting WiFi setup');
+      try {
+        session.requestWifiSetup('Streaming requires your glasses to be connected to WiFi');
+        return "Please set up WiFi on your glasses to enable streaming. A setup prompt has been sent to your phone.";
+      } catch (error) {
+        console.error('Error requesting WiFi setup:', error);
+        return "Error: Glasses require WiFi connection. Please connect your glasses to WiFi and try again.";
+      }
+    }
+
     try {
       // Get parameters with defaults
       const platform = (toolCall.toolParameters?.platform as string) || session.streamPlatform || 'here';
@@ -68,8 +80,20 @@ export async function handleToolCall(toolCall: ToolCall, userId: string, session
 
         session.camera.startManagedStream(options).then(() => {
           broadcastStreamStatus(userId, formatStreamStatus(session));
+        }).catch((error: any) => {
+          console.error("Error in managed stream:", error);
+          // Check if this is a WiFi error
+          if (error?.code === 'WIFI_NOT_CONNECTED' || error?.message?.includes('WiFi')) {
+            console.log('WiFi error detected - requesting WiFi setup');
+            try {
+              session.requestWifiSetup('Streaming requires your glasses to be connected to WiFi');
+            } catch (setupError) {
+              console.error('Error requesting WiFi setup:', setupError);
+            }
+          }
+          broadcastStreamStatus(userId, formatStreamStatus(session));
         });
-        return "Stream started successfully";
+        return "Stream starting...";
       } else {
         // Unmanaged stream
         let rtmpUrl: string | undefined;
@@ -94,11 +118,35 @@ export async function handleToolCall(toolCall: ToolCall, userId: string, session
 
         session.camera.startStream({ rtmpUrl }).then(() => {
           broadcastStreamStatus(userId, formatStreamStatus(session));
+        }).catch((error: any) => {
+          console.error("Error in unmanaged stream:", error);
+          // Check if this is a WiFi error
+          if (error?.code === 'WIFI_NOT_CONNECTED' || error?.message?.includes('WiFi')) {
+            console.log('WiFi error detected - requesting WiFi setup');
+            try {
+              session.requestWifiSetup('Streaming requires your glasses to be connected to WiFi');
+            } catch (setupError) {
+              console.error('Error requesting WiFi setup:', setupError);
+            }
+          }
+          broadcastStreamStatus(userId, formatStreamStatus(session));
         });
-        return "Stream started successfully";
+        return "Stream starting...";
       }
     } catch (error: any) {
       console.error("Error starting stream:", error);
+
+      // Check if this is a WiFi error
+      if (error?.code === 'WIFI_NOT_CONNECTED' || error?.message?.includes('WiFi')) {
+        console.log('WiFi error detected - requesting WiFi setup');
+        try {
+          session.requestWifiSetup('Streaming requires your glasses to be connected to WiFi');
+          return "WiFi connection required. A setup prompt has been sent to your phone.";
+        } catch (setupError) {
+          console.error('Error requesting WiFi setup:', setupError);
+        }
+      }
+
       return `Error: ${error?.message || error}`;
     }
   } else if (toolCall.toolId === "stop_streaming") {
